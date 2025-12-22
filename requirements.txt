@@ -1,10 +1,6 @@
-pandas as pd
-sqlite3
-numpy as np
-matplotlib.pyplot as plt
-from datetime import datetime, date, timedelta
-io
+streamlit
+pandas
+numpy
+matplotlib
 xlsxwriter
-docx import Document
-docx.shared import Inches
-docx.enum.text import WD_ALIGN_PARAGRAPH
+python-docx

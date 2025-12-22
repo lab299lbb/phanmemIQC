@@ -1,14 +1,10 @@
-# File: main.py
-import streamlit as st
-import pandas as pd
-import sqlite3
-import numpy as np
-import matplotlib.pyplot as plt
+pandas as pd
+sqlite3
+numpy as np
+matplotlib.pyplot as plt
 from datetime import datetime, date, timedelta
-import io
-import xlsxwriter
-from docx import Document
-from docx.shared import Inches
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-
-from db_module import DBManager
+io
+xlsxwriter
+docx import Document
+docx.shared import Inches
+docx.enum.text import WD_ALIGN_PARAGRAPH

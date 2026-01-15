@@ -2674,7 +2674,96 @@ with tabs[5]:
             # Đảm bảo hàm export_verification_excel sử dụng đúng key results['s_l'] và results['grand_mean']
             report_data = export_verification_excel(test_selected, ref, input_matrix, results)
             st.download_button("📥 Tải báo cáo lưu trữ", data=report_data, file_name=f"EP15A3_{test_selected}.xlsx", key="dl_clsi")
+import pandas as pd
+import numpy as np
+import statsmodels.api as sm
+import streamlit as st
+import plotly.graph_objects as go
 
+def verification_linearity_ep06_ed2():
+    st.header("🔬 Xác nhận Tuyến tính theo CLSI EP06-Ed2")
+    
+    # --- PHẦN 1: CẤU HÌNH TIÊU CHÍ ---
+    st.sidebar.subheader("Cấu hình tiêu chí")
+    adl_type = st.sidebar.selectbox("Loại sai số cho phép (ADL):", ["Phần trăm (%)", "Giá trị tuyệt đối"])
+    adl_value = st.sidebar.number_input(f"Giá trị ADL ({adl_type}):", value=5.0)
+
+    # --- PHẦN 2: NHẬP LIỆU ---
+    st.subheader("1. Nhập liệu thực nghiệm")
+    st.info("EP06-Ed2 khuyến nghị ít nhất 5 mức nồng độ, mỗi mức đo lặp lại (ví dụ n=3).")
+    
+    # Tạo bảng nhập liệu mẫu
+    default_data = {
+        "Nồng độ kỳ vọng (X)": [10, 25, 50, 100, 200],
+        "Lần 1": [10.2, 24.5, 51.2, 98.0, 208.0],
+        "Lần 2": [9.8, 25.1, 49.8, 101.5, 205.0],
+        "Lần 3": [10.0, 24.9, 50.5, 99.0, 206.5]
+    }
+    df_input = st.data_editor(pd.DataFrame(default_data), num_rows="dynamic")
+
+    if st.button("Phân tích kết quả"):
+        # Xử lý dữ liệu
+        X = df_input.iloc[:, 0].values
+        Y_reps = df_input.iloc[:, 1:].values
+        Y_mean = np.mean(Y_reps, axis=1)
+        
+        # --- PHẦN 3: THUẬT TOÁN HỒI QUY (WLS - Weighted Least Squares) ---
+        # EP06-Ed2 khuyến nghị WLS nếu sai số thay đổi theo nồng độ
+        # Ở đây sử dụng OLS cho đơn giản hoặc WLS nếu cần độ chính xác cao
+        X_with_const = sm.add_constant(X)
+        model = sm.OLS(Y_mean, X_with_const).fit()
+        intercept, slope = model.params
+        Y_pred = model.predict(X_with_const)
+
+        # --- PHẦN 4: TÍNH ĐỘ LỆCH (DEVIATION FROM LINEARITY) ---
+        ddl_absolute = Y_mean - Y_pred
+        ddl_percent = (ddl_absolute / Y_pred) * 100
+        
+        if adl_type == "Phần trăm (%)":
+            deviations = np.abs(ddl_percent)
+            is_pass = deviations <= adl_value
+        else:
+            deviations = np.abs(ddl_absolute)
+            is_pass = deviations <= adl_value
+
+        # --- PHẦN 5: HIỂN THỊ KẾT QUẢ ---
+        st.subheader("2. Kết quả phân tích độ lệch")
+        
+        res_df = pd.DataFrame({
+            "Nồng độ (X)": X,
+            "Trung bình thực đo (Y)": Y_mean,
+            "Giá trị dự tính (Tuyến tính)": Y_pred,
+            "Độ lệch thực tế": ddl_absolute if adl_type != "Phần trăm (%)" else ddl_percent,
+            "Kết luận": ["✅ Đạt" if p else "❌ Không đạt" for p in is_pass]
+        })
+        st.table(res_df.style.format(precision=2))
+
+        # --- PHẦN 6: ĐỒ THỊ THEO CHUẨN EP06 ---
+        st.subheader("3. Đồ thị hồi quy & Khoảng sai số")
+        
+        fig = go.Figure()
+        # Đường tuyến tính
+        fig.add_trace(go.Scatter(x=X, y=Y_pred, mode='lines', name='Đường tuyến tính lý tưởng', line=dict(color='red', dash='dash')))
+        # Các điểm dữ liệu thực tế
+        fig.add_trace(go.Scatter(x=X, y=Y_mean, mode='markers+text', name='Trung bình thực đo', 
+                                 text=[f"{v:.1f}" for v in Y_mean], textposition="top center"))
+        
+        fig.update_layout(title="Đồ thị xác nhận tính tuyến tính", xaxis_title="Nồng độ kỳ vọng", yaxis_title="Kết quả đo được")
+        st.plotly_chart(fig)
+
+        # Biểu đồ Bias (Độ lệch)
+        fig_bias = go.Figure()
+        fig_bias.add_trace(go.Bar(x=X, y=ddl_percent if adl_type == "Phần trăm (%)" else ddl_absolute, name="Độ lệch thực tế"))
+        fig_bias.add_shape(type="line", x0=min(X), y0=adl_value, x1=max(X), y1=adl_value, line=dict(color="red", dash="dot"))
+        fig_bias.add_shape(type="line", x0=min(X), y0=-adl_value, x1=max(X), y1=-adl_value, line=dict(color="red", dash="dot"))
+        fig_bias.update_layout(title=f"Biểu đồ độ lệch (Tiêu chí: ±{adl_value})", yaxis_title="Độ lệch")
+        st.plotly_chart(fig_bias)
+
+        # KẾT LUẬN CHUNG
+        if all(is_pass):
+            st.success(f"⭐⭐⭐ KẾT LUẬN: Phương pháp TUYẾN TÍNH trong khoảng từ {min(X)} đến {max(X)}.")
+        else:
+            st.error("⚠️ KẾT LUẬN: Phương pháp KHÔNG ĐẠT tính tuyến tính tại một số nồng độ khảo sát.")
 
 # IMPORT EXCEL
 with tabs[6]: 
@@ -3016,3 +3105,4 @@ with tabs[7]:
     elif pwd:
         st.error("Sai mật khẩu.")
         # Giao diện nút bấm trên Sidebar
+
